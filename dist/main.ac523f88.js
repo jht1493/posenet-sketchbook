@@ -4753,6 +4753,7 @@ function fromByteArray (uint8) {
 }
 
 },{}],"node_modules/ieee754/index.js":[function(require,module,exports) {
+/*! ieee754. BSD-3-Clause License. Feross Aboukhadijeh <https://feross.org/opensource> */
 exports.read = function (buffer, offset, isLE, mLen, nBytes) {
   var e, m
   var eLen = (nBytes * 8) - mLen - 1
@@ -31376,7 +31377,7 @@ exports.default = PoseDetection;
 var define;
 var global = arguments[3];
 /*!
- *  howler.js v2.2.0
+ *  howler.js v2.2.1
  *  howlerjs.com
  *
  *  (c) 2013-2020, James Simpson of GoldFire Studios
@@ -31650,7 +31651,7 @@ var global = arguments[3];
         opus: !!audioTest.canPlayType('audio/ogg; codecs="opus"').replace(/^no$/, ''),
         ogg: !!audioTest.canPlayType('audio/ogg; codecs="vorbis"').replace(/^no$/, ''),
         oga: !!audioTest.canPlayType('audio/ogg; codecs="vorbis"').replace(/^no$/, ''),
-        wav: !!audioTest.canPlayType('audio/wav; codecs="1"').replace(/^no$/, ''),
+        wav: !!(audioTest.canPlayType('audio/wav; codecs="1"') || audioTest.canPlayType('audio/wav')).replace(/^no$/, ''),
         aac: !!audioTest.canPlayType('audio/aac;').replace(/^no$/, ''),
         caf: !!audioTest.canPlayType('audio/x-caf;').replace(/^no$/, ''),
         m4a: !!(audioTest.canPlayType('audio/x-m4a;') || audioTest.canPlayType('audio/m4a;') || audioTest.canPlayType('audio/aac;')).replace(/^no$/, ''),
@@ -32739,15 +32740,15 @@ var global = arguments[3];
         lastTick = Date.now();
         vol += diff * tick;
 
+        // Round to within 2 decimal points.
+        vol = Math.round(vol * 100) / 100;
+
         // Make sure the volume is in the right bounds.
         if (diff < 0) {
           vol = Math.max(to, vol);
         } else {
           vol = Math.min(to, vol);
         }
-
-        // Round to within 2 decimal points.
-        vol = Math.round(vol * 100) / 100;
 
         // Change the volume.
         if (self._webAudio) {
@@ -32981,7 +32982,7 @@ var global = arguments[3];
       }
 
       // If the sound hasn't loaded, add it to the load queue to seek when capable.
-      if (self._state !== 'loaded' || self._playLock) {
+      if (typeof seek === 'number' && (self._state !== 'loaded' || self._playLock)) {
         self._queue.push({
           event: 'seek',
           action: function() {
@@ -33123,6 +33124,7 @@ var global = arguments[3];
           // Remove any event listeners.
           sounds[i]._node.removeEventListener('error', sounds[i]._errorFn, false);
           sounds[i]._node.removeEventListener(Howler._canPlayEvent, sounds[i]._loadFn, false);
+          sounds[i]._node.removeEventListener('ended', sounds[i]._endFn, false);
 
           // Release the Audio object back to the pool.
           Howler._releaseHtml5Audio(sounds[i]._node);
@@ -33619,6 +33621,11 @@ var global = arguments[3];
         self._loadFn = self._loadListener.bind(self);
         self._node.addEventListener(Howler._canPlayEvent, self._loadFn, false);
 
+        // Listen for the 'ended' event on the sound to account for edge-case where
+        // a finite sound has a duration of Infinity.
+        self._endFn = self._endListener.bind(self);
+        self._node.addEventListener('ended', self._endFn, false);
+
         // Setup the new audio node.
         self._node.src = parent._src;
         self._node.preload = parent._preload === true ? 'auto' : parent._preload;
@@ -33692,6 +33699,32 @@ var global = arguments[3];
 
       // Clear the event listener.
       self._node.removeEventListener(Howler._canPlayEvent, self._loadFn, false);
+    },
+
+    /**
+     * HTML5 Audio ended listener callback.
+     */
+    _endListener: function() {
+      var self = this;
+      var parent = self._parent;
+
+      // Only handle the `ended`` event if the duration is Infinity.
+      if (parent._duration === Infinity) {
+        // Update the parent duration to match the real audio duration.
+        // Round up the duration to account for the lower precision in HTML5 Audio.
+        parent._duration = Math.ceil(self._node.duration * 10) / 10;
+
+        // Update the sprite that corresponds to the real duration.
+        if (parent._sprite.__default[1] === Infinity) {
+          parent._sprite.__default[1] = parent._duration * 1000;
+        }
+
+        // Run the regular ended method.
+        parent._ended(self);
+      }
+
+      // Clear the event listener since the duration is now correct.
+      self._node.removeEventListener('ended', self._endFn, false);
     }
   };
 
@@ -33914,7 +33947,7 @@ var global = arguments[3];
 /*!
  *  Spatial Plugin - Adds support for stereo and 3D audio where Web Audio is supported.
  *  
- *  howler.js v2.2.0
+ *  howler.js v2.2.1
  *  howlerjs.com
  *
  *  (c) 2013-2020, James Simpson of GoldFire Studios
